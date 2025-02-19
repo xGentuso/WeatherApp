@@ -20,9 +20,12 @@ struct ContentView: View {
                 // 🔍 Search Bar with Integrated Add Button
                 HStack {
                     TextField("Enter a city", text: $searchText)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .padding(.leading)
-
+                        .onChange(of: searchText) { newValue in
+                            Task {
+                                await updateSuggestions()
+                            }
+                        }
+                    
                     // ➕ Add City Button Inside Search Bar
                     Button(action: {
                         Task {
