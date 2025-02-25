@@ -10,70 +10,77 @@ import SwiftUI
 
 struct WeatherEntry: TimelineEntry {
     let date: Date
-    let city: String
-    let temperature: String
-    let condition: String
-    let weatherIcon: String
+    let cityWeather: CityWeather?
 }
 
-struct WeatherProvider: TimelineProvider {
+struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> WeatherEntry {
-        WeatherEntry(date: Date(), city: "Toronto", temperature: "10°C", condition: "Clear", weatherIcon: "sun.max.fill")
+        WeatherEntry(date: Date(), cityWeather: nil)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (WeatherEntry) -> Void) {
-        let entry = WeatherEntry(date: Date(), city: "Toronto", temperature: "10°C", condition: "Clear", weatherIcon: "sun.max.fill")
-        completion(entry)
+        Task {
+            let entry = await fetchWeatherEntry()
+            completion(entry)
+        }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<WeatherEntry>) -> Void) {
         Task {
-            let city = "Toronto" // Default city (you can modify this)
-            
-            do {
-                let weather = try await WeatherService.shared.fetchWeather(for: city)
-                let entry = WeatherEntry(
-                    date: Date(),
-                    city: weather.name,
-                    temperature: weather.temperatureString,
-                    condition: weather.condition,
-                    weatherIcon: weather.weatherIcon
-                )
+            let entry = await fetchWeatherEntry()
+            let nextUpdate = Date().addingTimeInterval(30) // Refresh every hour
+            let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
+            completion(timeline)
+        }
+    }
+    
+    /// Fetches weather data using the stored location from UserDefaults (App Group).
+    private func fetchWeatherEntry() async -> WeatherEntry {
+        let sharedDefaults = UserDefaults(suiteName: "group.com.triosRM.WeatherApp")
 
-                let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date())!
-                let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
-                completion(timeline)
+        if let locationArray = sharedDefaults?.array(forKey: "lastLocation") as? [Double], locationArray.count == 2 {
+            let latitude = locationArray[0]
+            let longitude = locationArray[1]
+
+            print("📍 Widget retrieved location: \(latitude), \(longitude)")
+
+            do {
+                let roundedLat = Double(String(format: "%.4f", latitude)) ?? latitude
+                let roundedLon = Double(String(format: "%.4f", longitude)) ?? longitude
+                let weather = try await WeatherService.shared.fetchWeather(for: "\(roundedLat),\(roundedLon)")
+                
+                return WeatherEntry(date: Date(), cityWeather: weather)
             } catch {
-                print("Error fetching weather for widget: \(error)")
-                let fallbackEntry = WeatherEntry(date: Date(), city: "Unknown", temperature: "--°C", condition: "Unknown", weatherIcon: "questionmark.circle.fill")
-                let timeline = Timeline(entries: [fallbackEntry], policy: .after(Date().addingTimeInterval(1800))) // Retry in 30 min
-                completion(timeline)
+                print("❌ Error fetching weather: \(error)")
+                return WeatherEntry(date: Date(), cityWeather: nil)
             }
+        } else {
+            print("❌ No location data found in UserDefaults")
+            return WeatherEntry(date: Date(), cityWeather: nil)
         }
     }
 }
 
-struct WeatherWidgetView: View {
-    var entry: WeatherProvider.Entry
+struct WeatherWidgetEntryView: View {
+    var entry: Provider.Entry
 
     var body: some View {
         VStack {
-            Text(entry.city)
-                .font(.headline)
-
-            Image(systemName: entry.weatherIcon)
-                .font(.largeTitle)
-                .foregroundColor(.blue)
-
-            Text(entry.temperature)
-                .font(.title)
-                .bold()
-
-            Text(entry.condition)
-                .font(.caption)
-                .foregroundColor(.gray)
+            if let weather = entry.cityWeather {
+                Image(systemName: weather.weatherIcon)
+                    .font(.largeTitle)
+                
+                Text(weather.name)
+                    .font(.headline)
+                
+                Text(weather.temperatureString)
+                    .font(.title)
+            } else {
+                Text("Location not available")
+                    .font(.footnote)
+            }
         }
-        .padding()
+        .containerBackground(.background, for: .widget)
     }
 }
 
@@ -81,11 +88,11 @@ struct WeatherWidget: Widget {
     let kind: String = "WeatherWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: WeatherProvider()) { entry in
-            WeatherWidgetView(entry: entry)
+        StaticConfiguration(kind: kind, provider: Provider()) { entry in
+            WeatherWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Weather Widget")
-        .description("Shows the current weather for a city.")
-        .supportedFamilies([.systemSmall, .systemMedium]) // Widget sizes
+        .configurationDisplayName("Local Weather")
+        .description("Shows current weather for your location.")
+        .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

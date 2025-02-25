@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var locationManager = LocationManager()
     @State private var cities = ["Toronto", "Halifax", "Vancouver", "Edmonton", "St. Catharines", "Niagara Falls"]
     @State private var weatherData: [CityWeather] = []
     @State private var isLoading = false
@@ -19,6 +20,7 @@ struct ContentView: View {
             VStack {
                 // 🔍 Search Bar with Integrated Add Button
                 HStack {
+                    
                     TextField("Enter a city", text: $searchText)
                         .onChange(of: searchText) { newValue in
                             Task {
@@ -39,6 +41,7 @@ struct ContentView: View {
                     .padding(.trailing)
                 }
                 .padding(.top)
+                
 
                 // 🔽 Drop-Down Suggestions from API
                 if !suggestedCities.isEmpty {

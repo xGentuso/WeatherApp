@@ -1,8 +1,8 @@
 //
 //  WeatherWidgetBundle.swift
-//  WeatherWidget
+//  WeatherApp
 //
-//  Created by ryan mota on 2025-02-20.
+//  Created by ryan mota on 2025-02-24.
 //
 
 import WidgetKit

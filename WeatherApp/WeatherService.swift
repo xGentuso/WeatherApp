@@ -23,10 +23,23 @@ class WeatherService {
     private let baseURL = "https://api.openweathermap.org/data/2.5/weather"
     private let geoBaseURL = "https://api.openweathermap.org/geo/1.0/direct"
     
-    /// Fetch weather details for a given city and return a basic CityWeather object.
-    func fetchWeather(for city: String) async throws -> CityWeather {
-        let encodedCity = city.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? city
-        let urlString = "\(baseURL)?q=\(encodedCity)&units=metric&appid=\(apiKey)"
+    /// Fetch weather details for a given city name or coordinates.
+    /// If the input string is in the format "lat,lon", the method uses latitude and longitude parameters.
+    func fetchWeather(for cityOrCoordinates: String) async throws -> CityWeather {
+        let urlString: String
+        // Attempt to detect a coordinate string by splitting on ","
+        let components = cityOrCoordinates.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        if components.count == 2,
+           let lat = Double(components[0]),
+           let lon = Double(components[1]) {
+            // Use lat/lon parameters when coordinates are provided
+            urlString = "\(baseURL)?lat=\(lat)&lon=\(lon)&units=metric&appid=\(apiKey)"
+        } else {
+            // Otherwise assume it's a city name and encode it properly
+            let encodedCity = cityOrCoordinates.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cityOrCoordinates
+            urlString = "\(baseURL)?q=\(encodedCity)&units=metric&appid=\(apiKey)"
+        }
+        
         guard let url = URL(string: urlString) else { throw URLError(.badURL) }
         
         let (data, _) = try await URLSession.shared.data(from: url)
@@ -38,10 +51,19 @@ class WeatherService {
                            condition: condition)
     }
     
-    /// Fetch detailed weather information for a given city.
-    func fetchWeatherDetail(for city: String) async throws -> WeatherDetail {
-        let encodedCity = city.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? city
-        let urlString = "\(baseURL)?q=\(encodedCity)&units=metric&appid=\(apiKey)"
+    /// Fetch detailed weather information for a given city name or coordinates.
+    func fetchWeatherDetail(for cityOrCoordinates: String) async throws -> WeatherDetail {
+        let urlString: String
+        let components = cityOrCoordinates.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        if components.count == 2,
+           let lat = Double(components[0]),
+           let lon = Double(components[1]) {
+            urlString = "\(baseURL)?lat=\(lat)&lon=\(lon)&units=metric&appid=\(apiKey)"
+        } else {
+            let encodedCity = cityOrCoordinates.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cityOrCoordinates
+            urlString = "\(baseURL)?q=\(encodedCity)&units=metric&appid=\(apiKey)"
+        }
+        
         guard let url = URL(string: urlString) else { throw URLError(.badURL) }
         
         let (data, _) = try await URLSession.shared.data(from: url)
@@ -74,9 +96,8 @@ class WeatherService {
         
         // Group forecast items by the start of each day
         let grouped = Dictionary(grouping: forecastResponse.list) { item -> Date in
-            // Convert the timestamp to a Date
+            // Convert the timestamp to a Date and round down to midnight
             let date = Date(timeIntervalSince1970: item.dt)
-            // Use Calendar to round down to midnight (start of day)
             return Calendar.current.startOfDay(for: date)
         }
         
